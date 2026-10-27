@@ -120,18 +120,18 @@ export function monthlySeries(data, prices, todayMonth) {
     const b = bench(i, plan);
     if (rec[m]) {
       const r = rec[m];
-      out.push({ month: m, idx: i, bench: b, kind: 'recorded', value: r.value, cost: r.cost, people: r.people, note: r.note, scope: r.scope, estimated: !!(r.estimatedCost || r.estimatedPeople) });
+      out.push({ month: m, idx: i, bench: b, kind: 'recorded', value: r.value, cost: r.cost, cash: r.cash ?? 0, people: r.people, note: r.note, footnote: r.footnote, scope: r.scope, estimated: !!(r.estimatedCost || r.estimatedPeople) });
       continue;
     }
     if (m === todayMonth) {
       const v = valuate(data, livePx(prices));
-      out.push({ month: m, idx: i, bench: b, kind: 'live', value: v.totals.all.fin, cost: v.totals.all.cost, people: Object.fromEntries(data.people.map((p) => [p.id, { value: v.totals[p.id].fin, cost: v.totals[p.id].cost }])) });
+      out.push({ month: m, idx: i, bench: b, kind: 'live', value: v.totals.all.fin, cost: v.totals.all.cost, cash: v.totals.all.cash, people: Object.fromEntries(data.people.map((p) => [p.id, { value: v.totals[p.id].fin, cost: v.totals[p.id].cost, cash: v.totals[p.id].cash }])) });
       continue;
     }
     const px = monthEndPx(prices, m);
     if (!px) continue;
     const v = valuate(data, px, stateAt(data, lastDayOfMonth(m)));
-    out.push({ month: m, idx: i, bench: b, kind: 'monthEnd', value: v.totals.all.fin, cost: v.totals.all.cost, people: Object.fromEntries(data.people.map((p) => [p.id, { value: v.totals[p.id].fin, cost: v.totals[p.id].cost }])) });
+    out.push({ month: m, idx: i, bench: b, kind: 'monthEnd', value: v.totals.all.fin, cost: v.totals.all.cost, cash: v.totals.all.cash, people: Object.fromEntries(data.people.map((p) => [p.id, { value: v.totals[p.id].fin, cost: v.totals[p.id].cost, cash: v.totals[p.id].cash }])) });
   }
   return out;
 }

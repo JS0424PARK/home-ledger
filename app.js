@@ -165,14 +165,20 @@ function chartCard() {
   const all = S.person === 'all';
   const seg = all ? `<div class="seg"><button data-chart="month" class="${S.chart === 'month' ? 'on' : ''}">월별</button><button data-chart="plan" class="${S.chart === 'plan' ? 'on' : ''}">20년</button></div>` : '';
   const mode = all ? S.chart : 'month';
-  const legend = mode === 'month'
-    ? `<div class="legend"><span><i style="background:#3182F6"></i>평가액</span><span><i class="line" style="background:#191F28"></i>투자원금</span>${all ? '<span><i class="line" style="background:var(--plan)"></i>계획</span>' : ''}</div>`
-    : `<div class="legend"><span><i class="line" style="background:#3182F6"></i>우리 자산</span><span><i class="line" style="background:var(--plan)"></i>계획 (0원·월 100만원)</span></div>`;
+  if (mode === 'plan') {
+    return `<section class="card">
+      <div class="card-h"><span class="card-t">자산 흐름</span>${seg}</div>
+      <div class="legend"><span><i class="line" style="background:#3182F6"></i>우리 자산</span><span><i class="line" style="background:var(--plan)"></i>계획 (0원·월 100만원)</span></div>
+      <div class="chart" id="chart"></div>
+      <div id="pick"></div>
+    </section>`;
+  }
   return `<section class="card">
-    <div class="card-h"><span class="card-t">자산 흐름</span>${seg}</div>
-    ${legend}
+    <div class="card-h" style="margin-bottom:10px"><span class="card-t">자산 흐름</span>${seg}</div>
+    <div id="flowHead"></div>
     <div class="chart" id="chart"></div>
-    <div id="pick"></div>
+    <div id="flowTiles"></div>
+    <div id="flowTable"></div>
   </section>`;
 }
 
@@ -185,70 +191,120 @@ function drawChart() {
   if (!el) return;
   const all = S.person === 'all';
   const mode = all ? S.chart : 'month';
-  const W = Math.max(280, el.clientWidth), H = mode === 'month' ? 210 : 230;
-  const ser = series();
-  if (mode === 'month') drawMonthly(el, ser.slice(-12), W, H, all);
-  else drawPlan(el, ser, W, H);
+  const W = Math.max(280, el.clientWidth);
+  if (mode === 'month') drawFlow(el, W);
+  else drawPlan(el, series(), W, 230);
 }
 
 function niceMax(v) {
   if (v <= 0) return 1;
   const e = Math.pow(10, Math.floor(Math.log10(v)));
-  for (const s of [1, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10]) if (s * e >= v) return s * e;
+  for (const s of [1, 1.2, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10]) if (s * e >= v) return s * e;
   return 10 * e;
 }
 
-function drawMonthly(el, ser, W, H, all) {
-  const p = S.person;
-  const pts = ser.map((s) => ({
-    ...s,
-    v: p === 'all' ? s.value : s.people?.[p]?.value ?? 0,
-    c: p === 'all' ? s.cost : s.people?.[p]?.cost ?? 0
-  }));
-  if (!pts.length) { el.innerHTML = '<p class="empty">아직 기록이 없어요</p>'; return; }
-  if (!S.pick || !pts.find((x) => x.month === S.pick)) S.pick = pts[pts.length - 1].month;
-  const L = 44, R = 6, T = 10, B = 26;
-  const max = niceMax(Math.max(...pts.map((x) => Math.max(x.v, x.c, all ? x.bench : 0))) * 1.05);
-  const y = (val) => T + (H - T - B) * (1 - val / max);
-  const n = pts.length, slot = (W - L - R) / Math.max(n, 6), bw = Math.min(34, slot * 0.56);
-  const x0 = L + ((W - L - R) - slot * n) / 2;
-  let s = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="월별 자산 그래프">`;
-  for (let i = 0; i <= 4; i++) {
-    const val = (max / 4) * i, yy = y(val);
-    s += `<line x1="${L}" x2="${W - R}" y1="${yy}" y2="${yy}" stroke="#EEF0F3"/>`;
-    s += `<text x="${L - 8}" y="${yy + 4}" text-anchor="end" font-size="11" fill="#8B95A1">${short(val)}</text>`;
-  }
-  const planPts = [];
-  pts.forEach((pt, i) => {
-    const cx = x0 + slot * i + slot / 2, sel = pt.month === S.pick;
-    const top = y(pt.v);
-    s += `<rect x="${cx - bw / 2}" y="${top}" width="${bw}" height="${Math.max(0, y(0) - top)}" rx="6" fill="${sel ? '#3182F6' : '#B8D5FD'}"/>`;
-    s += `<line x1="${cx - bw / 2 - 4}" x2="${cx + bw / 2 + 4}" y1="${y(pt.c)}" y2="${y(pt.c)}" stroke="#191F28" stroke-width="2.2" stroke-linecap="round" opacity="${sel ? .85 : .45}"/>`;
-    const [yy, mm] = pt.month.split('-');
-    const lab = i === 0 || mm === '01' ? `${yy.slice(2)}.${+mm}` : `${+mm}월`;
-    s += `<text x="${cx}" y="${H - 6}" text-anchor="middle" font-size="12" fill="${sel ? '#191F28' : '#8B95A1'}" font-weight="${sel ? 700 : 500}">${lab}</text>`;
-    if (all) planPts.push([cx, y(pt.bench)]);
-    s += `<rect x="${x0 + slot * i}" y="0" width="${slot}" height="${H}" fill="transparent" data-m="${pt.month}" style="cursor:pointer"/>`;
+const FL = { cost: '#C5CCD4', costLine: '#9AA3AE', line: '#3182F6', pl: '#8CBBFA', loss: '#F7B3BB', cash: '#CFE2FD' };
+const manS = (n) => (Math.abs(n) < 1e4 ? `${fmt(Math.abs(n))}원` : `${fmt(Math.abs(n) / 1e4)}만`);
+const smanS = (n) => (n > 0 ? '+' : n < 0 ? '-' : '') + manS(n);
+function monthName(m) {
+  const [yy, mm] = m.split('-');
+  return yy === thisMonth().slice(0, 4) ? `${+mm}월` : `${yy.slice(2)}년 ${+mm}월`;
+}
+function flowKind(p) {
+  if (p.kind === 'live') return '오늘 기준';
+  if (p.kind === 'monthEnd') return '월말 종가 기준';
+  return p.scope === 'stocks' ? '주식만 · 일부 추정' : '계좌 점검 기록';
+}
+
+function flowPoints() {
+  const who = S.person;
+  return series().map((s) => {
+    const src = who === 'all' ? s : (s.people?.[who] || { value: 0, cost: 0, cash: 0 });
+    const v = src.value || 0, c = src.cost || 0, cash = src.cash || 0;
+    return { ...s, v, c, cash, pl: v - cash - c };
   });
-  if (all && planPts.length) {
-    s += `<polyline points="${planPts.map((q) => q.join(',')).join(' ')}" fill="none" stroke="#FF9F43" stroke-width="2" stroke-dasharray="4 3" pointer-events="none"/>`;
-    planPts.forEach(([cx, cy]) => { s += `<circle cx="${cx}" cy="${cy}" r="3.5" fill="#fff" stroke="#FF9F43" stroke-width="2" pointer-events="none"/>`; });
+}
+
+function drawFlow(el, W) {
+  const allPts = flowPoints();
+  if (!allPts.length) { el.innerHTML = '<p class="empty">아직 기록이 없어요</p>'; return; }
+  if (!S.pick || !allPts.find((x) => x.month === S.pick)) S.pick = allPts[allPts.length - 1].month;
+  let pts = allPts.slice(-12);
+  const single = pts.length === 1;
+  if (single) pts = [pts[0], pts[0]];
+  const n = pts.length, H = 220, L = 4, R = 4, T = 30, B = 26;
+  const yMax = niceMax(Math.max(...pts.map((p) => Math.max(p.v, p.c))) * 1.12);
+  const inner = W - L - R - 56;
+  const x = (i) => L + 28 + inner * (i / (n - 1));
+  const y = (v) => T + (H - T - B) * (1 - Math.max(0, v) / yMax);
+  const base = y(0);
+  const band = (top, bot) => pts.map((p, i) => `${x(i).toFixed(1)},${y(top(p)).toFixed(1)}`)
+    .concat(pts.map((p, i) => `${x(i).toFixed(1)},${y(bot(p)).toFixed(1)}`).reverse()).join(' ');
+  const hasLoss = pts.some((p) => p.pl < 0);
+  let s = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="월별 자산 흐름">`;
+  for (const t of [0, yMax / 2, yMax]) s += `<line x1="${L}" x2="${W - R}" y1="${y(t)}" y2="${y(t)}" stroke="#F2F4F6"/>`;
+  s += `<polygon points="${band((p) => Math.min(p.c, p.c + p.pl), () => 0)}" fill="${FL.cost}" opacity=".55"/>`;
+  s += `<polygon points="${band((p) => p.c + Math.max(p.pl, 0), (p) => p.c)}" fill="${FL.pl}" opacity=".85"/>`;
+  if (hasLoss) s += `<polygon points="${band((p) => p.c, (p) => p.c + Math.min(p.pl, 0))}" fill="${FL.loss}" opacity=".8"/>`;
+  s += `<polygon points="${band((p) => p.v, (p) => p.c + p.pl)}" fill="${FL.cash}"/>`;
+  s += `<polyline points="${pts.map((p, i) => `${x(i).toFixed(1)},${y(p.c).toFixed(1)}`).join(' ')}" fill="none" stroke="${FL.costLine}" stroke-width="1.5"/>`;
+  s += `<polyline points="${pts.map((p, i) => `${x(i).toFixed(1)},${y(p.v).toFixed(1)}`).join(' ')}" fill="none" stroke="${FL.line}" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>`;
+  // band labels at the latest month
+  const last = pts[n - 1], lx = x(n - 1) - 10;
+  const plTop = y(last.c + Math.max(last.pl, 0)), plBot = y(last.c + Math.min(last.pl, 0));
+  if (Math.abs(plBot - plTop) >= 17) {
+    s += `<text x="${lx}" y="${(plTop + plBot) / 2 + 4.5}" text-anchor="end" font-size="12.5" font-weight="700" fill="${last.pl >= 0 ? '#1B64DA' : '#D22030'}">${last.pl >= 0 ? '손익' : '손실'} ${smanS(last.pl)}</text>`;
   }
-  s += '</svg>';
-  el.innerHTML = s;
-  const pt = pts.find((x) => x.month === S.pick);
-  const kindText = pt.kind === 'live' ? '오늘 기준' : pt.kind === 'monthEnd' ? '월말 종가로 계산' : pt.scope === 'stocks' ? '주식만 · 일부 추정' : '계좌 점검 기록';
-  const [py, pm] = pt.month.split('-');
-  let ph = `<div class="pick"><div class="pick-h"><span>${py}년 ${+pm}월</span><span class="card-s">${kindText}</span></div>`;
-  ph += `<div class="pick-row"><span>평가액</span><b>${won(pt.v)}</b></div>`;
-  ph += `<div class="pick-row"><span>투자원금</span><b>${won(pt.c)}</b></div>`;
-  if (all) {
-    ph += `<div class="pick-row"><span>계획 금액</span><b>${won(pt.bench)}</b></div>`;
-    ph += `<div class="pick-row"><span>계획 대비</span><b class="${cls(pt.v - pt.bench)}">${won(pt.v - pt.bench, true)}</b></div>`;
-  }
-  if (pt.note) ph += `<p class="note" style="margin-top:8px">${esc(pt.note)}</p>`;
-  ph += '</div>';
-  $('#pick').innerHTML = ph;
+  const costTop = y(Math.min(last.c, last.c + last.pl));
+  if (base - costTop >= 20) s += `<text x="${lx}" y="${(costTop + base) / 2 + 4.5}" text-anchor="end" font-size="12.5" font-weight="700" fill="#4E5968">원금 ${manS(last.c)}</text>`;
+  // points, labels, hit areas
+  const selIdx = single ? 1 : pts.findIndex((p) => p.month === S.pick);
+  if (selIdx >= 0) s += `<line x1="${x(selIdx)}" x2="${x(selIdx)}" y1="${T - 6}" y2="${base}" stroke="#191F28" stroke-opacity=".18" stroke-dasharray="3 3"/>`;
+  const step = Math.ceil(n / 6);
+  pts.forEach((p, i) => {
+    if (single && i === 0) return;
+    const on = i === selIdx, isLast = i === n - 1;
+    s += `<circle cx="${x(i)}" cy="${y(p.v)}" r="${on ? 5.5 : 4}" fill="${on ? FL.line : '#fff'}" stroke="${FL.line}" stroke-width="2"/>`;
+    if (n <= 6 || on || isLast) s += `<text x="${x(i)}" y="${y(p.v) - 11}" text-anchor="middle" font-size="12.5" font-weight="700" fill="${on ? FL.line : '#4E5968'}">${manS(p.v)}</text>`;
+    if ((n - 1 - i) % step === 0 || on) s += `<text x="${x(i)}" y="${H - 5}" text-anchor="middle" font-size="12.5" font-weight="${on ? 700 : 500}" fill="${on ? '#191F28' : '#8B95A1'}">${monthName(p.month)}</text>`;
+    const hw = single ? inner : inner / (n - 1);
+    s += `<rect x="${x(i) - hw / 2}" y="0" width="${hw}" height="${H}" fill="transparent" data-m="${p.month}" style="cursor:pointer"/>`;
+  });
+  el.innerHTML = s + '</svg>';
+
+  // head: selected month value + change
+  const si = allPts.findIndex((p) => p.month === S.pick);
+  const sel = allPts[si], prev = si > 0 ? allPts[si - 1] : null;
+  const d = prev ? sel.v - prev.v : null;
+  $('#flowHead').innerHTML = `<div class="fl-label">${monthName(sel.month)} · ${flowKind(sel)}</div>
+    <div class="fl-big">${money(sel.v)}</div>
+    <div class="fl-delta ${d == null ? 'muted' : cls(d)}">${d == null ? '기록을 시작한 달이에요' : `${monthName(prev.month)}보다 ${money(d, true)} (${pct((d / prev.v) * 100, 1)})`}</div>`;
+
+  // tiles = legend for the selected month
+  $('#flowTiles').innerHTML = `<div class="tiles">
+    <div class="tile"><span><i style="background:${FL.cost}"></i>투자원금</span><b>${manS(sel.c)}</b><small class="muted">넣은 돈</small></div>
+    <div class="tile"><span><i style="background:${sel.pl >= 0 ? FL.pl : FL.loss}"></i>평가손익</span><b class="${cls(sel.pl)}">${smanS(sel.pl)}</b><small class="${cls(sel.pl)}">${sel.c ? pct((sel.pl / sel.c) * 100, 1) : '-'}</small></div>
+    <div class="tile"><span><i style="background:${FL.cash}"></i>예수금</span><b>${manS(sel.cash)}</b><small class="muted">투자 대기</small></div>
+  </div>`;
+
+  // monthly table (latest first)
+  const rows = allPts.map((p, i) => ({ p, prev: i > 0 ? allPts[i - 1] : null })).reverse();
+  const shown = S.moreMonths ? rows : rows.slice(0, 6);
+  const notes = [...new Set(allPts.map((p) => p.footnote).filter(Boolean))];
+  $('#flowTable').innerHTML = `<table class="ftable">
+    <tr><th>월</th><th>평가액</th><th>평가손익</th><th>지난달 대비</th></tr>
+    ${shown.map(({ p, prev: pv }) => {
+      const dd = pv ? p.v - pv.v : null;
+      return `<tr data-m="${p.month}" class="${p.month === S.pick ? 'sel' : ''} ${p.kind === 'live' ? 'now' : ''}">
+        <td>${monthName(p.month)}${p.kind === 'live' ? '<small class="muted">오늘</small>' : ''}</td>
+        <td>${manS(p.v)}</td>
+        <td class="${cls(p.pl)}">${smanS(p.pl)}<small>${p.c ? pct((p.pl / p.c) * 100, 1) : '-'}</small></td>
+        <td class="${dd == null ? 'muted' : cls(dd)}">${dd == null ? '-' : `${smanS(dd)}<small>${pct((dd / pv.v) * 100, 1)}</small>`}</td>
+      </tr>`;
+    }).join('')}
+  </table>
+  ${rows.length > 6 ? `<button class="more" data-more="1">${S.moreMonths ? '접기' : `지난 기록 더보기 (${rows.length - 6}개월)`}</button>` : ''}
+  ${notes.length ? `<p class="note">${notes.map(esc).join(' ')}</p>` : ''}`;
 }
 
 function drawPlan(el, ser, W, H) {
@@ -432,18 +488,23 @@ function footer() {
 
 /* ---------- events ---------- */
 document.addEventListener('click', async (e) => {
-  const t = e.target.closest('[data-tab],[data-person],[data-chart],[data-m],[data-row],#refreshBtn');
+  const t = e.target.closest('[data-tab],[data-person],[data-chart],[data-m],[data-row],[data-more],#refreshBtn');
   if (!t) return;
   if (t.dataset.tab) { S.tab = t.dataset.tab; render(); window.scrollTo({ top: 0 }); }
   else if (t.dataset.person) { S.person = t.dataset.person; S.pick = null; render(); }
   else if (t.dataset.chart) { S.chart = t.dataset.chart; render(); }
   else if (t.dataset.m) { S.pick = t.dataset.m; drawChart(); }
+  else if (t.dataset.more) { S.moreMonths = !S.moreMonths; drawChart(); }
   else if (t.dataset.row) { const id = t.dataset.row; S.open.has(id) ? S.open.delete(id) : S.open.add(id); t.classList.toggle('open'); }
   else if (t.id === 'refreshBtn') {
     t.classList.add('spin');
     try { await loadPrices(); render(); toast('최신 가격을 불러왔어요'); } catch { toast('가격을 불러오지 못했어요'); }
     t.classList.remove('spin');
   }
+});
+document.addEventListener('mouseover', (e) => {
+  const t = e.target.closest('#chart [data-m]');
+  if (t && t.dataset.m !== S.pick) { S.pick = t.dataset.m; drawChart(); }
 });
 let lastW = 0;
 window.addEventListener('resize', () => {
