@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<meta name="referrer" content="no-referrer">
+<meta name="theme-color" content="#F2F4F6">
+<title>우리 부부 자산</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%233182F6'/%3E%3Cpath d='M18 40l9-10 7 6 12-14' stroke='white' stroke-width='5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="lock" class="lock">
+  <div class="lock-inner">
+    <div class="lock-logo" aria-hidden="true">
+      <svg viewBox="0 0 64 64"><rect width="64" height="64" rx="18" fill="#3182F6"/><path d="M18 40l9-10 7 6 12-14" stroke="#fff" stroke-width="5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </div>
+    <h1 class="lock-title">우리 부부 자산</h1>
+    <p class="lock-sub" id="lockMsg">비밀번호 4자리를 입력해 주세요</p>
+    <div class="dots" id="dots" aria-live="polite"><i></i><i></i><i></i><i></i></div>
+    <div class="pad" id="pad">
+      <button data-k="1">1</button><button data-k="2">2</button><button data-k="3">3</button>
+      <button data-k="4">4</button><button data-k="5">5</button><button data-k="6">6</button>
+      <button data-k="7">7</button><button data-k="8">8</button><button data-k="9">9</button>
+      <span></span><button data-k="0">0</button><button data-k="del" aria-label="지우기">
+        <svg viewBox="0 0 24 24" width="24" height="24"><path d="M9 6h10a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H9l-6-6 6-6z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M12.5 10l4 4m0-4l-4 4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+      </button>
+    </div>
+  </div>
+</div>
+
+<div id="app" class="app" hidden>
+  <header class="top">
+    <div class="top-inner">
+      <div class="brand">우리 부부 자산</div>
+      <button class="icon-btn" id="refreshBtn" aria-label="가격 다시 불러오기" title="가격 다시 불러오기">
+        <svg viewBox="0 0 24 24" width="22" height="22"><path d="M20 12a8 8 0 1 1-2.34-5.66M20 4v5h-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+    </div>
+    <nav class="tabs" role="tablist">
+      <button role="tab" data-tab="invest" class="on">투자</button>
+      <button role="tab" data-tab="total">전체 자산</button>
+    </nav>
+  </header>
+  <main id="view" class="wrap"></main>
+  <footer class="foot wrap" id="foot"></footer>
+</div>
+<div class="toast" id="toast" role="status"></div>
+<script type="module" src="app.js"></script>
+</body>
+</html>

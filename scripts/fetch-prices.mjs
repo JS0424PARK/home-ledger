@@ -1,0 +1,100 @@
+// Daily price update: KRX ETFs, US stocks, USD/KRW (Naver Finance). No dependencies.
+import fs from 'node:fs';
+
+const KRX = ['379810', '458730', '360750', '480040'];
+const US = { GOOGL: 'GOOGL.O' };
+const START = '2026-07-01';
+const FILE = new URL('../prices.json', import.meta.url);
+const UA = { 'User-Agent': 'Mozilla/5.0 (price-bot)' };
+
+const num = (s) => typeof s === 'number' ? s : Number(String(s).replace(/,/g, ''));
+const ymd = (d) => d.toISOString().slice(0, 10);
+const compact = (s) => s.replace(/-/g, '');
+const fromCompact = (s) => `${s.slice(0, 4)}-${s.slice(4, 6)}-${s.slice(6, 8)}`;
+
+async function getJson(url, tries = 3) {
+  for (let i = 0; i < tries; i++) {
+    try {
+      const r = await fetch(url, { headers: UA });
+      if (!r.ok) throw new Error(`${r.status} ${url}`);
+      return await r.json();
+    } catch (e) {
+      if (i === tries - 1) throw e;
+      await new Promise((res) => setTimeout(res, 1500 * (i + 1)));
+    }
+  }
+}
+
+let prev = {};
+try { prev = JSON.parse(fs.readFileSync(FILE, 'utf8')); } catch {}
+
+const today = new Date(Date.now() + 9 * 3600e3); // KST
+const from = prev.monthEnd && Object.keys(prev.monthEnd).length
+  ? ymd(new Date(today.getTime() - 75 * 86400e3))
+  : START;
+const range = `startDateTime=${compact(from)}0000&endDateTime=${compact(ymd(today))}2359`;
+
+const items = {};
+const monthEnd = { ...(prev.monthEnd || {}) };
+const setMonthEnd = (key, rows) => {
+  // rows: [{date:'YYYY-MM-DD', close:Number}] ascending
+  const byMonth = {};
+  for (const row of rows) byMonth[row.date.slice(0, 7)] = row;
+  for (const [m, row] of Object.entries(byMonth)) {
+    monthEnd[m] = monthEnd[m] || {};
+    monthEnd[m][key] = row.close;
+    monthEnd[m]._dates = { ...(monthEnd[m]._dates || {}), [key]: row.date };
+  }
+};
+
+const errors = [];
+for (const code of KRX) {
+  try {
+    const [basic, chart] = await Promise.all([
+      getJson(`https://m.stock.naver.com/api/stock/${code}/basic`),
+      getJson(`https://api.stock.naver.com/chart/domestic/item/${code}/day?${range}`)
+    ]);
+    const rows = chart.map((c) => ({ date: fromCompact(c.localDate), close: num(c.closePrice) }));
+    const last = rows[rows.length - 1], before = rows[rows.length - 2];
+    items[code] = { name: basic.stockName, price: last.close, currency: 'KRW', date: last.date,
+      chgPct: before ? +(((last.close / before.close) - 1) * 100).toFixed(2) : null };
+    setMonthEnd(code, rows);
+  } catch (e) { errors.push(`${code}: ${e.message}`); if (prev.items?.[code]) items[code] = prev.items[code]; }
+}
+for (const [sym, rc] of Object.entries(US)) {
+  try {
+    const [basic, chart] = await Promise.all([
+      getJson(`https://api.stock.naver.com/stock/${rc}/basic`),
+      getJson(`https://api.stock.naver.com/chart/foreign/item/${rc}/day?${range}`)
+    ]);
+    const rows = chart.map((c) => ({ date: fromCompact(c.localDate), close: num(c.closePrice) }));
+    const last = rows[rows.length - 1], before = rows[rows.length - 2];
+    items[sym] = { name: basic.stockName, price: last.close, currency: 'USD', date: last.date,
+      chgPct: before ? +(((last.close / before.close) - 1) * 100).toFixed(2) : null };
+    setMonthEnd(sym, rows);
+  } catch (e) { errors.push(`${sym}: ${e.message}`); if (prev.items?.[sym]) items[sym] = prev.items[sym]; }
+}
+let fx = prev.fx;
+try {
+  let list = [];
+  for (let page = 1; page <= 8; page++) {
+    const chunk = await getJson(`https://api.stock.naver.com/marketindex/exchange/FX_USDKRW/prices?page=${page}&pageSize=60`);
+    list = list.concat(chunk);
+    if (!chunk.length || chunk[chunk.length - 1].localTradedAt < from) break;
+  }
+  const rows = list.map((x) => ({ date: x.localTradedAt, close: num(x.closePrice) }))
+    .filter((x) => x.date >= from).sort((a, b) => a.date.localeCompare(b.date));
+  const last = rows[rows.length - 1];
+  fx = { USDKRW: { price: last.close, date: last.date } };
+  setMonthEnd('USDKRW', rows);
+} catch (e) { errors.push(`FX: ${e.message}`); }
+
+const out = {
+  updated: new Date().toISOString(),
+  fx, items,
+  monthEnd: Object.fromEntries(Object.entries(monthEnd).sort(([a], [b]) => a.localeCompare(b))),
+  errors
+};
+fs.writeFileSync(FILE, JSON.stringify(out, null, 1) + '\n');
+console.log(JSON.stringify({ items: Object.fromEntries(Object.entries(items).map(([k, v]) => [k, `${v.price} ${v.date}`])), fx, months: Object.keys(out.monthEnd), errors }, null, 1));
+if (Object.keys(items).length === 0) process.exit(1);
