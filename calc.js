@@ -2,6 +2,54 @@
 
 export const ym = (date) => date.slice(0, 7);
 
+// Asset category: same index/theme grouped together regardless of product brand
+export function categoryOf(h) {
+  if (h.category) return h.category;
+  const n = `${h.name || ''} ${h.short || ''}`;
+  if (h.symbol === 'MMF' || /MMF/i.test(n)) return '현금·MMF';
+  if (/배당/.test(n)) return '배당';
+  if (/S&P|S＆P|에스앤피/i.test(n)) return 'S&P500';
+  if (/나스닥|NASDAQ/i.test(n)) return '나스닥';
+  if (/커버드콜/.test(n)) return '커버드콜';
+  if (h.symbol === 'GOOGL' || h.symbol === 'GOOG') return '구글';
+  return h.short || h.name;
+}
+
+export const isPension = (acct) => /연금|IRP/.test(acct?.type || '');
+
+// Expected dividends: last 12 months of actual distributions x current quantity, by payment month
+export function dividendForecast(data, prices, today, owner = null) {
+  const divs = prices.divs || {};
+  const fx = prices.fx?.USDKRW?.price || 0;
+  const acct = Object.fromEntries(data.accounts.map((a) => [a.id, a]));
+  const end = new Date(`${today}T00:00:00Z`).getTime();
+  const cut = end - 365 * 86400e3;
+  const months = Array.from({ length: 12 }, () => ({ total: 0, items: {} }));
+  const bySym = {};
+  for (const h of data.holdings) {
+    const a = acct[h.account];
+    if (owner && a?.owner !== owner) continue;
+    const d = divs[h.symbol];
+    if (!h.qty || !d) continue;
+    const list = d.events.filter((e) => { const t = new Date(`${e.ex}T00:00:00Z`).getTime(); return t > cut && t <= end; });
+    if (!list.length) continue;
+    const offset = d.currency === 'USD' ? 10 : 5; // ex-date -> payment month
+    const rate = d.currency === 'USD' ? fx : 1;
+    const s = bySym[h.symbol] || (bySym[h.symbol] = { symbol: h.symbol, short: h.short, name: h.name, category: categoryOf(h), annual: 0, perYear: list.length, accounts: 0, currency: d.currency, perShare: 0 });
+    s.accounts += 1;
+    s.perShare = list.reduce((x, e) => x + e.amt, 0);
+    for (const e of list) {
+      const m = new Date(new Date(`${e.ex}T00:00:00Z`).getTime() + offset * 86400e3).getUTCMonth();
+      const krw = h.qty * e.amt * rate;
+      months[m].total += krw;
+      months[m].items[h.symbol] = (months[m].items[h.symbol] || 0) + krw;
+      s.annual += krw;
+    }
+  }
+  const annual = months.reduce((x, m) => x + m.total, 0);
+  return { annual, months, bySym: Object.values(bySym).sort((a, b) => b.annual - a.annual) };
+}
+
 export function monthIndex(month, plan) {
   const [y, m] = month.split('-').map(Number);
   const [sy, sm] = plan.start.split('-').map(Number);

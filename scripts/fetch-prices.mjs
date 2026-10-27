@@ -6,16 +6,17 @@ const US = { GOOGL: 'GOOGL.O' };
 const START = '2026-07-01';
 const FILE = new URL('../prices.json', import.meta.url);
 const UA = { 'User-Agent': 'Mozilla/5.0 (price-bot)' };
+const YUA = { 'User-Agent': 'Mozilla/5.0' }; // Yahoo rejects full browser UAs without cookies
 
 const num = (s) => typeof s === 'number' ? s : Number(String(s).replace(/,/g, ''));
 const ymd = (d) => d.toISOString().slice(0, 10);
 const compact = (s) => s.replace(/-/g, '');
 const fromCompact = (s) => `${s.slice(0, 4)}-${s.slice(4, 6)}-${s.slice(6, 8)}`;
 
-async function getJson(url, tries = 3) {
+async function getJson(url, tries = 3, headers = UA) {
   for (let i = 0; i < tries; i++) {
     try {
-      const r = await fetch(url, { headers: UA });
+      const r = await fetch(url, { headers });
       if (!r.ok) throw new Error(`${r.status} ${url}`);
       return await r.json();
     } catch (e) {
@@ -89,9 +90,26 @@ try {
   setMonthEnd('USDKRW', rows);
 } catch (e) { errors.push(`FX: ${e.message}`); }
 
+// Distributions / dividends per share (Yahoo Finance chart events, last 2 years)
+const YH = { ...Object.fromEntries(KRX.map((c) => [c, `${c}.KS`])), ...Object.fromEntries(Object.keys(US).map((s) => [s, s])) };
+const divs = { ...(prev.divs || {}) };
+for (const [sym, ys] of Object.entries(YH)) {
+  try {
+    const path = `/v8/finance/chart/${encodeURIComponent(ys)}?range=2y&interval=1mo&events=div`;
+    const j = await getJson(`https://query1.finance.yahoo.com${path}`, 2, YUA).catch(() => getJson(`https://query2.finance.yahoo.com${path}`, 2, YUA));
+    const r = j.chart?.result?.[0];
+    if (!r) throw new Error('no result');
+    const isKR = ys.endsWith('.KS');
+    const events = Object.values(r.events?.dividends || {})
+      .map((e) => ({ ex: new Date(e.date * 1000 + (isKR ? 9 * 3600e3 : 0)).toISOString().slice(0, 10), amt: e.amount }))
+      .sort((a, b) => a.ex.localeCompare(b.ex));
+    divs[sym] = { currency: isKR ? 'KRW' : 'USD', events, src: 'Yahoo Finance', updated: ymd(today) };
+  } catch (e) { errors.push(`div ${sym}: ${e.message}`); }
+}
+
 const out = {
   updated: new Date().toISOString(),
-  fx, items,
+  fx, items, divs,
   monthEnd: Object.fromEntries(Object.entries(monthEnd).sort(([a], [b]) => a.localeCompare(b))),
   errors
 };

@@ -208,3 +208,91 @@ table.yr td { text-align: right; padding: 10px 0; border-top: 1px solid var(--li
 .ftable tr.sel td:first-child { box-shadow: inset 3px 0 0 var(--blue); padding-left: 8px; }
 .ftable tr.now td { font-weight: 700; }
 .more { width: 100%; margin-top: 8px; padding: 11px 0; border-radius: 12px; background: var(--bg); color: var(--sub); font-size: 13.5px; font-weight: 600; }
+
+/* shared */
+.dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; flex: none; }
+
+/* Investment weights (redesigned) */
+.wbar { display: flex; gap: 3px; height: 14px; border-radius: 999px; overflow: hidden; }
+.wbar i { display: block; min-width: 3px; }
+.wl { margin-top: 8px; }
+.wl-row { display: flex; align-items: center; gap: 12px; padding: 13px 0; border-top: 1px solid var(--line); }
+.wl-row:first-child { border-top: 0; }
+.wl-name { flex: 1; min-width: 0; }
+.wl-name b { display: block; font-size: 16px; font-weight: 600; }
+.wl-name small { display: block; font-size: 13px; color: var(--muted); margin-top: 2px; }
+.wl-val { text-align: right; }
+.wl-val b { display: block; font-size: 16px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.wl-val small { display: block; font-size: 13px; color: var(--muted); margin-top: 2px; font-variant-numeric: tabular-nums; }
+.wl-people { margin-top: 10px; padding-top: 16px; border-top: 1px solid var(--line); }
+.wl-ph { font-size: 13px; color: var(--sub); font-weight: 600; margin-bottom: 10px; }
+.pbar { display: flex; gap: 3px; height: 8px; border-radius: 999px; overflow: hidden; }
+.pbar i { display: block; }
+.pl-rows { margin-top: 10px; display: grid; gap: 8px; }
+.pl-rows div { display: grid; grid-template-columns: 10px 1fr auto 52px; gap: 10px; align-items: center; font-size: 14.5px; }
+.pl-rows b { font-weight: 600; font-variant-numeric: tabular-nums; }
+.pl-rows em { font-style: normal; color: var(--muted); text-align: right; font-variant-numeric: tabular-nums; }
+
+/* Accounts (redesigned) */
+.sec-h { display: flex; align-items: baseline; justify-content: space-between; margin: 28px 4px 4px; gap: 8px; }
+.sec-h b { font-size: 20px; font-weight: 700; }
+.sec-h span { font-size: 12.5px; color: var(--muted); }
+.acct2 { padding: 0; overflow: hidden; }
+.ah { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; padding: 18px 20px 16px; background: #FAFBFC; border-bottom: 1px solid var(--line); }
+.ah-t { display: flex; align-items: center; gap: 7px; font-size: 15px; font-weight: 600; }
+.ah-s { font-size: 13px; color: var(--muted); margin-top: 4px; }
+.ah-r { text-align: right; }
+.ah-r b { display: block; font-size: 18px; font-weight: 700; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+.ah-r small { display: block; font-size: 13px; font-weight: 600; margin-top: 3px; font-variant-numeric: tabular-nums; }
+.pill { display: inline-block; font-size: 12px; font-weight: 700; padding: 3px 8px; border-radius: 7px; background: #EEF0F3; color: var(--sub); }
+.pill.pen { background: #EEF0FF; color: #4F46E5; }
+.pill.isa { background: #E6F7F5; color: #0F8F82; }
+.pill.ovs { background: #E8F7EE; color: #1E9E57; }
+.hr { display: block; width: 100%; text-align: left; padding: 15px 20px; border-top: 1px solid var(--line); }
+.ah + .hr { border-top: 0; }
+.hr:active { background: #FAFBFC; }
+.hr-m { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.hr-l { min-width: 0; flex: 1; }
+.hr-l b { display: block; font-size: 16px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hr-l small { display: block; font-size: 13px; color: var(--muted); margin-top: 3px; }
+.hr-r { text-align: right; flex: none; }
+.hr-r b { display: block; font-size: 16px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.hr-r small { display: block; font-size: 13px; font-weight: 600; margin-top: 3px; font-variant-numeric: tabular-nums; }
+.est { font-style: normal; font-size: 11px; font-weight: 700; color: #D9480F; background: #FFF4E5; padding: 1px 5px; border-radius: 5px; margin-left: 2px; }
+.hr-d { display: none; margin-top: 12px; padding: 14px; background: var(--bg); border-radius: 14px; }
+.hr.open .hr-d { display: block; }
+.dg { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 16px; }
+.dg div { min-width: 0; }
+.dg span { display: block; font-size: 12px; color: var(--muted); }
+.dg b { display: block; font-size: 14px; font-weight: 600; margin-top: 2px; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+.hr-d p { font-size: 12.5px; color: var(--muted); margin-top: 10px; line-height: 1.5; }
+.hc { display: flex; justify-content: space-between; padding: 13px 20px; border-top: 1px solid var(--line); font-size: 14.5px; color: var(--sub); }
+.hc b { font-weight: 600; font-variant-numeric: tabular-nums; }
+
+/* Dividends */
+.dv-unit { font-size: 11.5px; color: var(--muted); text-align: right; margin-top: 2px; }
+.dv-h { font-size: 13px; color: var(--sub); font-weight: 600; margin: 20px 0 4px; }
+.dv-row { display: flex; align-items: center; gap: 12px; padding: 11px 0; border-top: 1px solid var(--line); }
+.dv-row:first-child { border-top: 0; }
+.dv-name { flex: 1; min-width: 0; }
+.dv-name b { display: block; font-size: 15px; font-weight: 600; }
+.dv-name small { display: block; font-size: 12.5px; color: var(--muted); margin-top: 1px; }
+.dv-row > b { font-size: 15px; font-weight: 700; }
+.pick-row span .dot { width: 8px; height: 8px; margin-right: 6px; vertical-align: 1px; }
+
+/* Donuts */
+.dn { display: flex; align-items: center; gap: 24px; margin-top: 16px; flex-wrap: wrap; }
+.donut { width: 180px; height: 180px; flex: none; margin: 0 auto; }
+.lg { flex: 1; min-width: 220px; }
+.lg-row { display: grid; grid-template-columns: 10px 1fr auto 54px; gap: 10px; align-items: center; padding: 9px 0; font-size: 15px; border-top: 1px solid var(--line); }
+.lg-row:first-child { border-top: 0; }
+.lg-row b { font-weight: 600; font-variant-numeric: tabular-nums; }
+.lg-row em { font-style: normal; color: var(--muted); text-align: right; font-variant-numeric: tabular-nums; }
+.accts { display: grid; gap: 12px; align-items: start; }
+@media (min-width: 860px) {
+  .accts { grid-template-columns: 1fr 1fr; }
+  .wl { display: grid; grid-template-columns: 1fr 1fr; column-gap: 48px; }
+  .wl-row:first-child, .wl-row:nth-child(2) { border-top: 0; }
+  .dv-list { display: grid; grid-template-columns: 1fr 1fr; column-gap: 48px; }
+  .dv-row:nth-child(2) { border-top: 0; }
+}

@@ -1,4 +1,4 @@
-import { monthIndex, bench, equivMonths, livePx, valuate, monthlySeries } from './calc.js';
+import { monthIndex, bench, equivMonths, livePx, valuate, monthlySeries, categoryOf, isPension, dividendForecast } from './calc.js';
 
 const $ = (s, el = document) => el.querySelector(s);
 const S = { enc: null, data: null, prices: null, tab: 'invest', person: 'all', chart: 'month', pick: null, open: new Set() };
@@ -99,6 +99,7 @@ function render() {
   document.querySelectorAll('.tabs button').forEach((b) => b.classList.toggle('on', b.dataset.tab === S.tab));
   $('#view').innerHTML = S.tab === 'invest' ? viewInvest() : viewTotal();
   drawChart();
+  drawDividend();
   $('#foot').innerHTML = footer();
 }
 
@@ -136,7 +137,7 @@ function viewInvest() {
   h += weightsCard(v);
   h += `</div>`;
   h += accountsBlock(v);
-  h += `<div class="stack" style="margin-top:12px">${recordsCard()}${checksCard()}</div>`;
+  h += `<div class="stack" style="margin-top:12px">${dividendCard()}${recordsCard()}${checksCard()}</div>`;
   return h;
 }
 
@@ -344,35 +345,69 @@ function drawPlan(el, ser, W, H) {
   </div>`;
 }
 
-function weightsOf(v, owner) {
+/* ---------- categories / weights ---------- */
+const CAT = { '나스닥': '#3182F6', 'S&P500': '#56C1F5', '배당': '#FFB020', '구글': '#2FC573', '커버드콜': '#A78BFA', '현금·MMF': '#C9D0D8' };
+const catColor = (k, i = 0) => CAT[k] || FALLBACK[i % FALLBACK.length];
+
+function groupByCategory(v, owner = null) {
   const g = new Map();
-  for (const r of v.rows.filter((x) => x.owner === owner)) g.set(r.h.short, (g.get(r.h.short) || 0) + (r.value || 0));
-  const cash = v.cash.filter((c) => c.owner === owner).reduce((s, c) => s + c.amount, 0);
-  const list = [...g.entries()].map(([k, val]) => ({ k, val })).sort((a, b) => (a.k === 'MMF') - (b.k === 'MMF') || b.val - a.val);
-  if (cash > 0) list.push({ k: '예수금', val: cash });
-  const total = list.reduce((s, x) => s + x.val, 0);
-  return { list, total };
+  const add = (k, val, who) => {
+    const e = g.get(k) || { k, val: 0, people: {} };
+    e.val += val; e.people[who] = (e.people[who] || 0) + val; g.set(k, e);
+  };
+  for (const r of v.rows) if (!owner || r.owner === owner) add(categoryOf(r.h), r.value || 0, r.owner);
+  for (const c of v.cash) if ((!owner || c.owner === owner) && c.amount) add('현금·MMF', c.amount, c.owner);
+  const list = [...g.values()].filter((x) => x.val > 0).sort((a, b) => (a.k === '현금·MMF') - (b.k === '현금·MMF') || b.val - a.val);
+  return { list, total: list.reduce((s, x) => s + x.val, 0) };
 }
 
 function weightsCard(v) {
-  const ids = S.person === 'all' ? S.data.people.map((p) => p.id) : [S.person];
-  const blocks = ids.map((id) => {
-    const { list, total } = weightsOf(v, id);
-    const bar = list.map((x, i) => `<i style="width:${(x.val / total) * 100}%;background:${colorOf(x.k, i)}"></i>`).join('');
-    const rows = list.map((x, i) => `<div class="wrow"><i style="background:${colorOf(x.k, i)}"></i><span>${esc(x.k)}</span><span class="amt">${money(x.val)}</span><span class="p">${((x.val / total) * 100).toFixed(1)}%</span></div>`).join('');
-    return `<div><div class="who"><b>${person(id).name}</b><span>${money(total)}</span></div><div class="stackbar">${bar}</div><div class="wlist">${rows}</div></div>`;
+  const all = S.person === 'all';
+  const { list, total } = groupByCategory(v, all ? null : S.person);
+  const bar = list.map((x, i) => `<i style="flex:${x.val};background:${catColor(x.k, i)}"></i>`).join('');
+  const rows = list.map((x, i) => {
+    const holders = S.data.people.filter((p) => x.people[p.id]);
+    const who = !all ? '' : holders.length > 1 ? holders.map((p) => `${p.short} ${money(x.people[p.id])}`).join(' · ') : holders.map((p) => `${p.short} 보유`).join('');
+    return `<div class="wl-row">
+      <i class="dot" style="background:${catColor(x.k, i)}"></i>
+      <div class="wl-name"><b>${esc(x.k)}</b>${who ? `<small>${who}</small>` : ''}</div>
+      <div class="wl-val"><b>${((x.val / total) * 100).toFixed(1)}%</b><small>${money(x.val)}</small></div>
+    </div>`;
   }).join('');
-  return `<section class="card"><div class="card-h"><span class="card-t">투자 비중</span><span class="card-s">평가액 기준 · 같은 종목은 합쳐서</span></div><div class="people ${ids.length > 1 ? 'two' : ''}">${blocks}</div></section>`;
+  let people = '';
+  if (all) {
+    const ps = S.data.people.map((p) => ({ p, val: v.totals[p.id].fin }));
+    const sum = ps.reduce((s, x) => s + x.val, 0);
+    people = `<div class="wl-people">
+      <div class="wl-ph"><span>사람별</span></div>
+      <div class="pbar">${ps.map((x, i) => `<i style="flex:${x.val};background:${i ? '#B0B8C1' : '#4E5968'}"></i>`).join('')}</div>
+      <div class="pl-rows">${ps.map((x, i) => `<div><i class="dot" style="background:${i ? '#B0B8C1' : '#4E5968'}"></i><span>${x.p.name}</span><b>${money(x.val)}</b><em>${((x.val / sum) * 100).toFixed(1)}%</em></div>`).join('')}</div>
+    </div>`;
+  }
+  return `<section class="card">
+    <div class="card-h"><span class="card-t">투자 비중</span><span class="card-s">평가액 기준 · 같은 지수는 합쳐서</span></div>
+    <div class="wbar">${bar}</div>
+    <div class="wl">${rows}</div>
+    ${people}
+  </section>`;
+}
+
+/* ---------- accounts ---------- */
+const PILL = { '연금저축': 'pen', 'IRP': 'pen', 'ISA': 'isa', '해외주식': 'ovs' };
+function brandOf(h) {
+  if (h.symbol === 'MMF') return '삼성 MMF';
+  if (h.currency === 'USD') return '미국 주식';
+  const w = (h.name || '').split(' ')[0];
+  return /^[A-Z]{2,}$/.test(w) ? w : '';
 }
 
 function accountsBlock(v) {
   const ids = S.person === 'all' ? S.data.people.map((p) => p.id) : [S.person];
-  let h = '';
+  let h = `<div class="sec-h"><b>계좌별 보유</b><span>항목을 누르면 자세히 보여요</span></div>`;
   for (const id of ids) {
     const accts = S.data.accounts.filter((a) => a.owner === id);
-    h += `<div class="owner-h"><b>${person(id).name}의 계좌</b><span>${money(v.totals[id].fin)}</span></div><div class="stack">`;
-    for (const a of accts) h += accountCard(a, v);
-    h += '</div>';
+    if (ids.length > 1) h += `<div class="owner-h"><b>${person(id).name}</b><span>${money(v.totals[id].fin)}</span></div>`;
+    h += `<div class="accts">${accts.map((a) => accountCard(a, v)).join('')}</div>`;
   }
   return h;
 }
@@ -380,34 +415,111 @@ function accountsBlock(v) {
 function accountCard(a, v) {
   const rows = v.rows.filter((r) => r.a.id === a.id);
   const cash = v.cash.find((c) => c.a.id === a.id)?.amount || 0;
-  const val = rows.reduce((s, r) => s + (r.value || 0), 0) + cash;
+  const hv = rows.reduce((s, r) => s + (r.value || 0), 0);
   const cost = rows.reduce((s, r) => s + r.cost, 0);
-  const pl = rows.reduce((s, r) => s + (r.value || 0), 0) - cost;
-  const fx = S.prices.fx?.USDKRW?.price;
-  let h = `<section class="card acct"><div class="acct-h"><div class="acct-n">${esc(a.broker)} · ${esc(a.label)}</div>
-    <div class="acct-v"><b>${won(val)}</b>${cost ? `<span class="${cls(pl)}">${pct((pl / cost) * 100)}</span>` : ''}</div></div>`;
+  const pl = hv - cost;
+  const sub = (a.label || '').replace(a.type, '').trim();
+  const fx = S.prices.fx?.USDKRW;
+  let h = `<section class="card acct2">
+    <div class="ah">
+      <div class="ah-l"><div class="ah-t"><span class="pill ${PILL[a.type] || ''}">${esc(a.type)}</span>${sub ? `<span>${esc(sub)}</span>` : ''}</div><div class="ah-s">${esc(a.broker)}</div></div>
+      <div class="ah-r"><b>${money(hv + cash)}</b>${cost ? `<small class="${cls(pl)}">${money(pl, true)} · ${pct((pl / cost) * 100, 1)}</small>` : '<small class="muted">현금만 있어요</small>'}</div>
+    </div>`;
   for (const r of rows) {
-    const h0 = r.h, open = S.open.has(h0.id);
-    const tag = h0.estimated ? '<span class="tag est">수량 추정</span>' : r.manual ? '<span class="tag man">직접 점검</span>' : '';
-    const qty = h0.qty != null
-      ? `${fmt(h0.qty)}주 · 평균 ${h0.currency === 'USD' && h0.avgUsd ? '$' + h0.avgUsd.toFixed(2) : won(h0.cost / h0.qty)}`
-      : `${md(h0.manualDate)} 평가액`;
-    const price = r.manual ? '계좌 화면 값' : h0.currency === 'USD' ? `$${r.usd?.toFixed(2)} (${won(r.price)})` : won(r.price);
-    h += `<button class="row ${open ? 'open' : ''}" data-row="${h0.id}">
-      <div class="row-1"><b>${esc(h0.name)}</b><span class="v">${r.value != null ? won(r.value) : '-'}</span></div>
-      <div class="row-2"><span>${qty}${tag}</span><span class="${cls(r.pl)}">${r.pl != null ? `${won(r.pl, true)} (${pct(r.plPct)})` : ''}</span></div>
-      <div class="row-d">
-        <div><span>투자원금</span><b>${won(r.cost)}</b></div>
-        <div><span>현재가</span><b>${price}</b></div>
-        <div><span>가격 기준일</span><b>${md(r.priceDate)}</b></div>
-        ${h0.currency === 'USD' && fx ? `<div><span>환율</span><b>${fx.toLocaleString('ko-KR')}원 (${md(S.prices.fx.USDKRW.date)})</b></div>` : ''}
-        ${h0.note ? `<p>${esc(h0.note)}</p>` : ''}
+    const x = r.h, open = S.open.has(x.id);
+    const brand = brandOf(x);
+    const meta = x.qty != null
+      ? `${brand ? `${esc(brand)} · ` : ''}${fmt(x.qty)}주${x.estimated ? ' <em class="est">추정</em>' : ''}`
+      : `${md(x.manualDate)} 평가액 · 직접 점검`;
+    const avg = x.qty ? (x.currency === 'USD' && x.avgUsd ? `$${x.avgUsd.toFixed(2)}` : won(x.cost / x.qty)) : '-';
+    const price = r.manual ? '계좌 화면 값' : x.currency === 'USD' ? `${r.usd?.toFixed(2)}` : won(r.price);
+    h += `<button class="hr ${open ? 'open' : ''}" data-row="${x.id}">
+      <div class="hr-m">
+        <div class="hr-l"><b>${esc(x.short)}</b><small>${meta}</small></div>
+        <div class="hr-r"><b>${r.value != null ? money(r.value) : '-'}</b><small class="${cls(r.pl)}">${r.pl != null ? `${money(r.pl, true)} · ${pct(r.plPct, 1)}` : ''}</small></div>
+      </div>
+      <div class="hr-d">
+        <div class="dg">
+          <div><span>상품명</span><b>${esc(x.name)}</b></div>
+          <div><span>평균 매입가</span><b>${avg}</b></div>
+          <div><span>현재가 (${md(r.priceDate)})</span><b>${price}</b></div>
+          <div><span>투자원금</span><b>${won(r.cost)}</b></div>
+          <div><span>평가금액</span><b>${r.value != null ? won(r.value) : '-'}</b></div>
+          ${x.currency === 'USD' && fx ? `<div><span>환율 (${md(fx.date)})</span><b>${fx.price.toLocaleString('ko-KR')}원</b></div>` : ''}
+        </div>
+        ${x.note ? `<p>${esc(x.note)}</p>` : ''}
       </div>
     </button>`;
   }
-  if (cash > 0 || !rows.length) h += `<div class="cashrow"><span>예수금</span><b class="num">${won(cash)}</b></div>`;
+  if (cash > 0 || !rows.length) h += `<div class="hc"><span>예수금</span><b>${won(cash)}</b></div>`;
   if (a.info?.length) h += `<details class="info"><summary>계좌 정보</summary><ul>${a.info.map((x) => `<li>${esc(x)}</li>`).join('')}</ul></details>`;
   return h + '</section>';
+}
+
+/* ---------- expected dividends ---------- */
+function divData() {
+  return dividendForecast(S.data, S.prices, kstToday(), S.person === 'all' ? null : S.person);
+}
+function dividendCard() {
+  const f = divData();
+  if (!f.bySym.length) return '';
+  const freq = (n) => (n >= 11 ? '매월' : n >= 4 ? '분기마다' : n >= 2 ? '반기마다' : '1년에 한 번');
+  const list = f.bySym.map((s) => `<div class="dv-row">
+      <i class="dot" style="background:${catColor(s.category)}"></i>
+      <div class="dv-name"><b>${esc(s.short)}</b><small>${freq(s.perYear)}${s.accounts > 1 ? ` · ${s.accounts}개 계좌` : ''}</small></div>
+      <b class="num">${money(s.annual)}</b>
+    </div>`).join('');
+  return `<section class="card">
+    <div class="card-h" style="margin-bottom:4px"><span class="card-t">예상 배당</span><span class="card-s">세전</span></div>
+    <span class="label">1년 예상 배당금</span>
+    <div class="big">${money(f.annual)}</div>
+    <div class="card-s" style="margin-top:2px">한 달 평균 ${money(f.annual / 12)}</div>
+    <div class="chart" id="divChart" style="margin-top:16px"></div>
+    <div id="divPick"></div>
+    <div class="dv-h">종목별 1년 예상</div>
+    <div class="dv-list">${list}</div>
+    <p class="note">최근 1년 동안 실제로 나온 분배금·배당금에 지금 보유 수량을 곱해 계산했어요. 연금·ISA 계좌는 받을 때 세금을 떼지 않고, 구글 배당은 미국 세금 15%를 떼고 들어와요.</p>
+  </section>`;
+}
+
+function drawDividend() {
+  const el = $('#divChart');
+  if (!el) return;
+  const f = divData();
+  const W = Math.max(280, el.clientWidth), H = 170, T = 22, B = 24, L = 2, R = 2;
+  const cur = +kstToday().slice(5, 7) - 1;
+  if (S.divPick == null) S.divPick = cur;
+  const max = niceMax(Math.max(...f.months.map((m) => m.total)) * 1.18) || 1;
+  const slot = (W - L - R) / 12, bw = Math.min(30, slot * 0.6);
+  const y = (v) => T + (H - T - B) * (1 - v / max);
+  const symCat = Object.fromEntries(f.bySym.map((s) => [s.symbol, s.category]));
+  const order = f.bySym.map((s) => s.symbol);
+  let s = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="월별 예상 배당">`;
+  s += `<line x1="${L}" x2="${W - R}" y1="${y(0)}" y2="${y(0)}" stroke="#E5E8EB"/>`;
+  f.months.forEach((m, i) => {
+    const cx = L + slot * i + slot / 2, on = i === S.divPick;
+    let acc = 0;
+    for (const sym of order) {
+      const val = m.items[sym] || 0;
+      if (!val) continue;
+      const y1 = y(acc + val), y0 = y(acc);
+      s += `<rect x="${cx - bw / 2}" y="${y1}" width="${bw}" height="${Math.max(0, y0 - y1 - 1)}" fill="${catColor(symCat[sym])}" opacity="${on ? 1 : 0.45}"/>`;
+      acc += val;
+    }
+    if (on || slot >= 30) s += `<text x="${cx}" y="${y(m.total) - 6}" text-anchor="middle" font-size="${on ? 12 : 10.5}" font-weight="${on ? 700 : 500}" fill="${on ? '#191F28' : '#8B95A1'}">${m.total ? (m.total / 1e4).toFixed(1) : ''}</text>`;
+    s += `<text x="${cx}" y="${H - 6}" text-anchor="middle" font-size="12" font-weight="${on ? 700 : 500}" fill="${on ? '#191F28' : i === cur ? '#3182F6' : '#8B95A1'}">${slot >= 30 ? `${i + 1}월` : i + 1}</text>`;
+    s += `<rect x="${L + slot * i}" y="0" width="${slot}" height="${H}" fill="transparent" data-dm="${i}" style="cursor:pointer"/>`;
+  });
+  el.innerHTML = s + '</svg><div class="dv-unit">막대 위 숫자 단위: 만원</div>';
+  const m = f.months[S.divPick];
+  const items = order.filter((sym) => m.items[sym]).map((sym) => {
+    const info = f.bySym.find((x) => x.symbol === sym);
+    return `<div class="pick-row"><span><i class="dot" style="background:${catColor(info.category)}"></i>${esc(info.short)}</span><b>${won(m.items[sym])}</b></div>`;
+  }).join('');
+  $('#divPick').innerHTML = `<div class="pick">
+    <div class="pick-h"><span>${S.divPick + 1}월 예상${S.divPick === cur ? ' <span class="muted" style="font-weight:500">이번 달</span>' : ''}</span><span>${won(m.total)}</span></div>
+    ${items || '<p class="empty" style="padding:0">이 달에는 예상 배당이 없어요</p>'}
+  </div>`;
 }
 
 const TX = { buy: '매수', sell: '매도', deposit: '입금', withdraw: '출금', dividend: '배당', check: '계좌 점검' };
@@ -435,13 +547,45 @@ function checksCard() {
   return `<section class="card"><details class="checks"><summary><span class="card-t">확인이 필요한 숫자</span><span class="cnt">${c.length}개</span></summary><ol>${c.map((x) => `<li>${esc(x)}</li>`).join('')}</ol></details></section>`;
 }
 
+function donutSvg(segs, size, centerLabel, centerValue) {
+  const r = size / 2 - 16, c = 2 * Math.PI * r, sw = 26, gap = segs.length > 1 ? 2 : 0;
+  const total = segs.reduce((s, x) => s + x.val, 0) || 1;
+  let off = 0, arcs = '';
+  for (const sg of segs) {
+    const len = (sg.val / total) * c;
+    const vis = Math.max(len - gap, Math.min(len, 1.5));
+    arcs += `<circle cx="${size / 2}" cy="${size / 2}" r="${r}" fill="none" stroke="${sg.color}" stroke-width="${sw}" stroke-dasharray="${vis} ${c - vis}" stroke-dashoffset="${-off}" transform="rotate(-90 ${size / 2} ${size / 2})"/>`;
+    off += len;
+  }
+  return `<svg viewBox="0 0 ${size} ${size}" class="donut" role="img" aria-label="${esc(centerLabel)} 비중">
+    <circle cx="${size / 2}" cy="${size / 2}" r="${r}" fill="none" stroke="#F2F4F6" stroke-width="${sw}"/>${arcs}
+    <text x="${size / 2}" y="${size / 2 - 6}" text-anchor="middle" font-size="12.5" fill="#8B95A1">${esc(centerLabel)}</text>
+    <text x="${size / 2}" y="${size / 2 + 16}" text-anchor="middle" font-size="17" font-weight="700" fill="#191F28">${esc(centerValue)}</text>
+  </svg>`;
+}
+function legendRows(segs) {
+  const total = segs.reduce((s, x) => s + x.val, 0) || 1;
+  return segs.map((x) => `<div class="lg-row"><i class="dot" style="background:${x.color}"></i><span>${esc(x.name)}</span><b>${money(x.val)}</b><em>${((x.val / total) * 100).toFixed(1)}%</em></div>`).join('');
+}
+
 function viewTotal() {
   const d = S.data;
   const v = valuate(d, livePx(S.prices));
+  const acct = Object.fromEntries(d.accounts.map((a) => [a.id, a]));
+  const finOf = (pred) => v.rows.filter((r) => pred(acct[r.h.account])).reduce((s, r) => s + (r.value || 0), 0)
+    + v.cash.filter((c) => pred(c.a)).reduce((s, c) => s + c.amount, 0);
+  const pension = finOf((a) => isPension(a));
+  const finEx = finOf((a) => !isPension(a));
   const fin = v.totals.all.fin, prop = d.property.value;
   const debt = d.debts.reduce((s, x) => s + x.amount, 0);
   const total = fin + prop, net = total - debt;
-  const pp = (prop / total) * 100;
+  const shortEok = (n) => (n >= 1e8 ? `${(n / 1e8).toFixed(2)}억` : money(n));
+  const assetSegs = [
+    { name: '부동산', val: prop, color: '#B0B8C1' },
+    { name: '연금', val: pension, color: '#6366F1' },
+    { name: '금융자산', val: finEx, color: '#14B8A6' }
+  ].sort((a, b) => b.val - a.val);
+  const cats = groupByCategory(v).list.map((x, i) => ({ name: x.k, val: x.val, color: catColor(x.k, i) }));
   const year = kstToday().slice(0, 4);
   const rows = [...(d.annual || [])].filter((a) => a.year !== year).sort((a, b) => a.year.localeCompare(b.year));
   let h = `<div class="grid two">`;
@@ -449,13 +593,18 @@ function viewTotal() {
     <span class="label">우리 집 순자산</span>
     <div class="big">${money(net)}</div>
     <div class="card-s" style="margin-top:4px">총자산 ${money(total)} − 부채 ${money(debt)}</div>
-    <div class="comp"><i style="width:${pp}%;background:#3182F6"></i><i style="width:${100 - pp}%;background:#56C1F5"></i></div>
-    <div class="stat"><span><i style="background:#3182F6"></i>부동산</span><b>${money(prop)} <span class="muted" style="font-weight:500">${pp.toFixed(1)}%</span></b></div>
-    <div class="stat"><span><i style="background:#56C1F5"></i>금융자산</span><b>${money(fin)} <span class="muted" style="font-weight:500">${(100 - pp).toFixed(1)}%</span></b></div>
-    <div class="stat"><span><i style="background:#F04452"></i>부채</span><b>-${money(debt)}</b></div>
+    <div class="dn">${donutSvg(assetSegs, 200, '총자산', shortEok(total))}<div class="lg">${legendRows(assetSegs)}</div></div>
+    <div class="stat"><span>부채 (주택담보대출)</span><b>-${money(debt)}</b></div>
     <div class="stat sum"><span>순자산</span><b>${money(net)}</b></div>
+    <p class="note">연금 = 연금저축 계좌 3개, 금융자산 = ISA·해외주식 계좌예요.</p>
   </section>`;
-  h += `<div class="stack" style="margin-top:0">`;
+  h += `<section class="card">
+    <div class="card-h"><span class="card-t">금융자산 구성</span><span class="card-s">연금 포함</span></div>
+    <div class="dn">${donutSvg(cats, 200, '금융자산', money(fin))}<div class="lg">${legendRows(cats)}</div></div>
+    <p class="note">상품 이름이 달라도 같은 지수는 하나로 묶었어요. (예: KODEX 미국나스닥100 → 나스닥)</p>
+  </section>`;
+  h += `</div>`;
+  h += `<div class="grid two" style="margin-top:12px">`;
   h += `<section class="card">
     <div class="card-h"><span class="card-t">우리 집</span><span class="card-s">${esc(d.property.name)}</span></div>
     <div class="stat"><span>매입 금액</span><b>${money(d.property.cost)}</b></div>
@@ -466,7 +615,7 @@ function viewTotal() {
   h += `<section class="card"><div class="card-h"><span class="card-t">부채</span></div>
     ${d.debts.map((x) => `<div class="stat"><span>${esc(x.name)}</span><b>${money(x.amount)}</b></div><p class="note" style="margin-top:0">${esc(x.note || '')} · ${md(x.date)} 기준</p>`).join('')}
   </section>`;
-  h += `</div></div>`;
+  h += `</div>`;
   h += `<section class="card" style="margin-top:12px"><div class="card-h"><span class="card-t">연도별 기록</span><span class="card-s">해마다 연말 기준으로 저장</span></div>
     <table class="yr"><thead><tr><th>연도</th><th>총자산</th><th>부채</th><th>순자산</th></tr></thead><tbody>
     ${rows.map((a) => `<tr><td>${a.year}</td><td>${short(a.total)}</td><td>${short(a.debt)}</td><td><b>${short(a.net)}</b></td></tr>`).join('')}
@@ -488,13 +637,14 @@ function footer() {
 
 /* ---------- events ---------- */
 document.addEventListener('click', async (e) => {
-  const t = e.target.closest('[data-tab],[data-person],[data-chart],[data-m],[data-row],[data-more],#refreshBtn');
+  const t = e.target.closest('[data-tab],[data-person],[data-chart],[data-m],[data-row],[data-more],[data-dm],#refreshBtn');
   if (!t) return;
   if (t.dataset.tab) { S.tab = t.dataset.tab; render(); window.scrollTo({ top: 0 }); }
-  else if (t.dataset.person) { S.person = t.dataset.person; S.pick = null; render(); }
+  else if (t.dataset.person) { S.person = t.dataset.person; S.pick = null; S.divPick = null; render(); }
   else if (t.dataset.chart) { S.chart = t.dataset.chart; render(); }
   else if (t.dataset.m) { S.pick = t.dataset.m; drawChart(); }
   else if (t.dataset.more) { S.moreMonths = !S.moreMonths; drawChart(); }
+  else if (t.dataset.dm) { S.divPick = +t.dataset.dm; drawDividend(); }
   else if (t.dataset.row) { const id = t.dataset.row; S.open.has(id) ? S.open.delete(id) : S.open.add(id); t.classList.toggle('open'); }
   else if (t.id === 'refreshBtn') {
     t.classList.add('spin');
@@ -509,7 +659,7 @@ document.addEventListener('mouseover', (e) => {
 let lastW = 0;
 window.addEventListener('resize', () => {
   const w = $('#chart')?.clientWidth || 0;
-  if (Math.abs(w - lastW) > 20) { lastW = w; drawChart(); }
+  if (Math.abs(w - lastW) > 20) { lastW = w; drawChart(); drawDividend(); }
 });
 
 (async function boot() {
