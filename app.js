@@ -134,6 +134,7 @@ function viewInvest() {
   h += `</div>`;
   h += `<div class="stack" style="margin-top:12px">`;
   h += chartCard();
+  h += flowsCard();
   h += weightsCard(v);
   h += `</div>`;
   h += accountsBlock(v);
@@ -522,6 +523,78 @@ function drawDividend() {
   </div>`;
 }
 
+/* ---------- monthly money in / bought ---------- */
+const FT = { deposit: '입금', withdraw: '출금', buy: '매수', sell: '매도', dividend: '분배금' };
+function flowMonths() {
+  const own = (acctId) => S.person === 'all' || S.data.accounts.find((a) => a.id === acctId)?.owner === S.person;
+  return (S.data.history || []).filter((h) => Array.isArray(h.flows)).map((h) => {
+    const items = h.flows.filter((f) => own(f.account));
+    const sum = (t) => items.filter((f) => f.type === t).reduce((s, f) => s + f.amount, 0);
+    return { month: h.month, items, note: h.flowsNote, dep: sum('deposit') - sum('withdraw'), buy: sum('buy'), sell: sum('sell'), div: sum('dividend'), est: items.some((f) => f.estimated) };
+  }).sort((a, b) => a.month.localeCompare(b.month));
+}
+function flowsCard() {
+  const ms = flowMonths();
+  if (!ms.length) return '';
+  if (!S.flowPick || !ms.find((m) => m.month === S.flowPick)) S.flowPick = ms[ms.length - 1].month;
+  const m = ms.find((x) => x.month === S.flowPick);
+  const all = S.person === 'all';
+  const target = S.data.plan.monthly;
+  const acct = Object.fromEntries(S.data.accounts.map((a) => [a.id, a]));
+  const byAcct = new Map();
+  for (const f of m.items) { if (!byAcct.has(f.account)) byAcct.set(f.account, []); byAcct.get(f.account).push(f); }
+  const order = S.data.accounts.map((a) => a.id).filter((id) => byAcct.has(id));
+  const rows = order.map((id) => {
+    const a = acct[id], fs = byAcct.get(id);
+    const dep = fs.filter((f) => f.type === 'deposit').reduce((s, f) => s + f.amount, 0) - fs.filter((f) => f.type === 'withdraw').reduce((s, f) => s + f.amount, 0);
+    const est = fs.some((f) => f.type === 'deposit' && f.estimated);
+    const lines = fs.filter((f) => f.type !== 'deposit' && f.type !== 'withdraw').map((f) => {
+      if (f.type === 'buy' || f.type === 'sell') return `<li><b>${esc(f.short || '')} ${f.qty ? `${fmt(f.qty)}주 ` : ''}${FT[f.type]}</b><span>${won(f.amount)}</span></li>`;
+      return `<li>${FT[f.type]} · ${esc(f.short || '')}<span>${won(f.amount)}</span></li>`;
+    });
+    const depMemo = fs.find((f) => f.type === 'deposit' && f.memo)?.memo;
+    if (!lines.length) lines.push(`<li class="muted">${dep > 0 ? '아직 현금으로 있어요' : ''}</li>`);
+    return `<div class="mf-acct">
+      <div class="mf-top">
+        <div><b>${esc(a.label)}</b><small>${person(a.owner).short} · ${esc(a.broker)}</small></div>
+        <div class="mf-dep">${dep ? `<b>+${money(dep)}</b>${est ? '<em class="est">추정</em>' : ''}` : '<span class="muted">들어온 돈 없음</span>'}${depMemo ? `<small>${esc(depMemo)}</small>` : ''}</div>
+      </div>
+      <ul>${lines.join('')}</ul>
+    </div>`;
+  }).join('');
+  const quiet = S.data.accounts.filter((a) => (all || a.owner === S.person) && !byAcct.has(a.id)).map((a) => `${person(a.owner).short} ${a.label}`);
+  const [yy, mm] = m.month.split('-');
+  const diff = m.dep - target;
+  const avg = ms.reduce((s, x) => s + x.dep, 0) / ms.length;
+  const table = `<table class="ftable mf-table">
+    <tr><th>월</th><th>들어온 돈</th><th>산 것</th><th>분배금</th></tr>
+    ${ms.slice().reverse().map((x) => `<tr data-fm="${x.month}" class="${x.month === m.month ? 'sel' : ''}">
+      <td>${monthName(x.month)}</td>
+      <td><b>${x.dep ? `+${manS(x.dep)}` : '0원'}</b>${all ? `<small class="mf-bar"><i style="width:${Math.min(100, (x.dep / target) * 50)}%"></i></small>` : ''}</td>
+      <td>${x.buy ? manS(x.buy) : '-'}</td>
+      <td>${x.div ? manS(x.div) : '-'}</td>
+    </tr>`).join('')}
+  </table>
+  ${all ? `<p class="note">막대 가운데 선이 계획 기준 월 ${money(target)}이에요.${ms.length > 1 ? ` 지금까지 월평균 ${money(avg)} 들어왔어요.` : ''}</p>` : ''}`;
+  return `<section class="card">
+    <div class="card-h" style="margin-bottom:4px"><span class="card-t">들어온 돈과 산 것</span><span class="card-s">${+yy === +thisMonth().slice(0, 4) ? '' : `${yy}년 `}${+mm}월</span></div>
+    <span class="label">${+mm}월에 새로 들어온 돈</span>
+    <div class="big">${money(m.dep)}</div>
+    ${all ? `<div class="pl ${cls(diff)}" style="font-size:14px">계획 기준 월 ${money(target)}보다 ${money(diff, true)}</div>` : ''}
+    <div class="tiles">
+      <div class="tile"><span>산 것</span><b>${m.buy ? manS(m.buy) : '0원'}</b></div>
+      <div class="tile"><span>판 것</span><b>${m.sell ? manS(m.sell) : '0원'}</b></div>
+      <div class="tile"><span>분배금</span><b>${m.div ? manS(m.div) : '0원'}</b></div>
+    </div>
+    <div class="dv-h" style="margin-top:18px">계좌별</div>
+    ${rows || '<p class="empty">이 달에는 변화가 없어요</p>'}
+    ${quiet.length ? `<p class="mf-quiet">변화 없음 · ${quiet.map(esc).join(', ')}</p>` : ''}
+    <div class="dv-h" style="margin-top:20px">월별 기록</div>
+    ${table}
+    ${m.note ? `<p class="note">${esc(m.note)}</p>` : ''}
+  </section>`;
+}
+
 const TX = { buy: '매수', sell: '매도', deposit: '입금', withdraw: '출금', dividend: '배당', check: '계좌 점검' };
 function recordsCard() {
   const tx = [...(S.data.transactions || [])].filter((t) => S.person === 'all' || ownerOfTx(t) === S.person).sort((a, b) => b.date.localeCompare(a.date)).slice(0, 12);
@@ -639,7 +712,7 @@ function footer() {
 
 /* ---------- events ---------- */
 document.addEventListener('click', async (e) => {
-  const t = e.target.closest('[data-tab],[data-person],[data-chart],[data-m],[data-row],[data-more],[data-dm],#refreshBtn');
+  const t = e.target.closest('[data-tab],[data-person],[data-chart],[data-m],[data-row],[data-more],[data-dm],[data-fm],#refreshBtn');
   if (!t) return;
   if (t.dataset.tab) { S.tab = t.dataset.tab; render(); window.scrollTo({ top: 0 }); }
   else if (t.dataset.person) { S.person = t.dataset.person; S.pick = null; S.divPick = null; render(); }
@@ -647,6 +720,7 @@ document.addEventListener('click', async (e) => {
   else if (t.dataset.m) { S.pick = t.dataset.m; drawChart(); }
   else if (t.dataset.more) { S.moreMonths = !S.moreMonths; drawChart(); }
   else if (t.dataset.dm) { S.divPick = +t.dataset.dm; drawDividend(); }
+  else if (t.dataset.fm) { S.flowPick = t.dataset.fm; const y = window.scrollY; render(); window.scrollTo(0, y); }
   else if (t.dataset.row) { const id = t.dataset.row; S.open.has(id) ? S.open.delete(id) : S.open.add(id); t.classList.toggle('open'); }
   else if (t.id === 'refreshBtn') {
     t.classList.add('spin');
