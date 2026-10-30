@@ -1,7 +1,8 @@
 name: Update prices
 on:
   schedule:
-    - cron: '30 7 * * *'   # 16:30 KST daily
+    - cron: '30 7 * * *'    # 16:30 KST (after KRX close)
+    - cron: '30 22 * * *'   # 07:30 KST (after US close)
   workflow_dispatch:
 permissions:
   contents: write

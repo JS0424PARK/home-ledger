@@ -530,7 +530,9 @@ function recordsCard() {
     ? tx.map((t) => {
       const h = hs[t.holding];
       const what = h ? `${h.short}${t.qty ? ` ${fmt(t.qty)}주` : ''}` : '';
-      return `<div class="list-row"><div><b>${TX[t.type] || t.type}${what ? ` · ${esc(what)}` : ''}</b><div class="card-s">${md(t.date)} · ${person(ownerOfTx(t))?.short || ''}${t.memo ? ` · ${esc(t.memo)}` : ''}</div></div><b class="num">${t.amount != null ? won(t.amount) : ''}</b></div>`;
+      const head = t.title ? esc(t.title) : `${TX[t.type] || t.type}${what ? ` · ${esc(what)}` : ''}`;
+      const tag = t.title ? `${TX[t.type] || t.type} · ` : '';
+      return `<div class="list-row"><div><b>${head}</b><div class="card-s">${md(t.date)} · ${person(ownerOfTx(t))?.short || ''} · ${tag}${esc(t.memo || '')}</div></div><b class="num">${t.amount != null ? won(t.amount) : ''}</b></div>`;
     }).join('')
     : '<p class="empty">아직 기록이 없어요. 매수·매도·입금은 채팅으로 알려주시면 반영할게요.</p>';
   return `<section class="card"><div class="card-h"><span class="card-t">최근 기록</span></div>${body}</section>`;
@@ -631,8 +633,8 @@ function footer() {
   const fx = S.prices.fx?.USDKRW;
   const up = S.prices.updated ? (() => { const k = new Date(new Date(S.prices.updated).getTime() + 9 * 3600e3).toISOString(); return `${+k.slice(5, 7)}/${+k.slice(8, 10)} ${k.slice(11, 16)}`; })() : '-';
   return `가격 · 국내 ETF ${md(krDate)} 종가 · 구글 ${md(us)} 종가(미국)${fx ? ` · 환율 ${fx.price.toLocaleString('ko-KR')}원 (${md(fx.date)})` : ''}<br>
-  가격 자동 갱신 매일 오후 4시 30분 · 마지막 갱신 ${up}<br>
-  계좌 점검 ${S.data.checked?.replace(/-/g, '.')} · 자료 수정 ${S.data.updated?.replace(/-/g, '.')}`;
+  가격 자동 갱신 하루 두 번 · 마지막 갱신 ${up}<br>
+  계좌 점검 ${S.data.people.map((p) => `${p.short} ${md(p.checked || S.data.checked)}`).join(' · ')} · 자료 수정 ${md(S.data.updated)}`;
 }
 
 /* ---------- events ---------- */

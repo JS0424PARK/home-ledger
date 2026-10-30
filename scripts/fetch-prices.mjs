@@ -26,6 +26,18 @@ async function getJson(url, tries = 3, headers = UA) {
   }
 }
 
+
+// Drop today's candle while that market is still trading (scheduled runs can start hours late)
+function localNow(tz) {
+  const f = new Intl.DateTimeFormat('en-CA', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false });
+  const o = Object.fromEntries(f.formatToParts(new Date()).map((x) => [x.type, x.value]));
+  return { date: `${o.year}-${o.month}-${o.day}`, mins: (+o.hour % 24) * 60 + +o.minute };
+}
+function settled(rows, tz, closeMins) {
+  const n = localNow(tz);
+  return rows.filter((r) => r.date < n.date || (r.date === n.date && n.mins >= closeMins));
+}
+
 let prev = {};
 try { prev = JSON.parse(fs.readFileSync(FILE, 'utf8')); } catch {}
 
@@ -55,7 +67,7 @@ for (const code of KRX) {
       getJson(`https://m.stock.naver.com/api/stock/${code}/basic`),
       getJson(`https://api.stock.naver.com/chart/domestic/item/${code}/day?${range}`)
     ]);
-    const rows = chart.map((c) => ({ date: fromCompact(c.localDate), close: num(c.closePrice) }));
+    const rows = settled(chart.map((c) => ({ date: fromCompact(c.localDate), close: num(c.closePrice) })), 'Asia/Seoul', 15 * 60 + 40);
     const last = rows[rows.length - 1], before = rows[rows.length - 2];
     items[code] = { name: basic.stockName, price: last.close, currency: 'KRW', date: last.date,
       chgPct: before ? +(((last.close / before.close) - 1) * 100).toFixed(2) : null };
@@ -68,7 +80,7 @@ for (const [sym, rc] of Object.entries(US)) {
       getJson(`https://api.stock.naver.com/stock/${rc}/basic`),
       getJson(`https://api.stock.naver.com/chart/foreign/item/${rc}/day?${range}`)
     ]);
-    const rows = chart.map((c) => ({ date: fromCompact(c.localDate), close: num(c.closePrice) }));
+    const rows = settled(chart.map((c) => ({ date: fromCompact(c.localDate), close: num(c.closePrice) })), 'America/New_York', 16 * 60 + 15);
     const last = rows[rows.length - 1], before = rows[rows.length - 2];
     items[sym] = { name: basic.stockName, price: last.close, currency: 'USD', date: last.date,
       chgPct: before ? +(((last.close / before.close) - 1) * 100).toFixed(2) : null };
