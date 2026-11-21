@@ -1,8 +1,8 @@
 {
- "updated": "2026-11-20T16:16:28.448Z",
+ "updated": "2026-11-21T15:29:05.718Z",
  "fx": {
   "USDKRW": {
-   "price": 1341.7,
+   "price": 1346.5,
    "date": "2026-11-20"
   }
  },
@@ -37,10 +37,10 @@
   },
   "GOOGL": {
    "name": "알파벳 Class A",
-   "price": 272.66,
+   "price": 265.29,
    "currency": "USD",
-   "date": "2026-11-19",
-   "chgPct": -3.46
+   "date": "2026-11-20",
+   "chgPct": -2.7
   }
  },
  "divs": {
@@ -81,7 +81,7 @@
     }
    ],
    "src": "Yahoo Finance",
-   "updated": "2026-11-21"
+   "updated": "2026-11-22"
   },
   "379810": {
    "currency": "KRW",
@@ -116,7 +116,7 @@
     }
    ],
    "src": "Yahoo Finance",
-   "updated": "2026-11-21"
+   "updated": "2026-11-22"
   },
   "458730": {
    "currency": "KRW",
@@ -215,7 +215,7 @@
     }
    ],
    "src": "Yahoo Finance",
-   "updated": "2026-11-21"
+   "updated": "2026-11-22"
   },
   "480040": {
    "currency": "KRW",
@@ -314,7 +314,7 @@
     }
    ],
    "src": "Yahoo Finance",
-   "updated": "2026-11-21"
+   "updated": "2026-11-22"
   },
   "GOOGL": {
    "currency": "USD",
@@ -353,7 +353,7 @@
     }
    ],
    "src": "Yahoo Finance",
-   "updated": "2026-11-21"
+   "updated": "2026-11-22"
   }
  },
  "monthEnd": {
@@ -432,10 +432,10 @@
     "458730": "2026-11-20",
     "480040": "2026-11-20",
     "USDKRW": "2026-11-20",
-    "GOOGL": "2026-11-19"
+    "GOOGL": "2026-11-20"
    },
-   "USDKRW": 1341.7,
-   "GOOGL": 272.66
+   "USDKRW": 1346.5,
+   "GOOGL": 265.29
   }
  },
  "errors": []
