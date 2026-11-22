@@ -1,5 +1,5 @@
 {
- "updated": "2026-11-21T15:29:05.718Z",
+ "updated": "2026-11-22T15:29:22.107Z",
  "fx": {
   "USDKRW": {
    "price": 1346.5,
@@ -81,7 +81,7 @@
     }
    ],
    "src": "Yahoo Finance",
-   "updated": "2026-11-22"
+   "updated": "2026-11-23"
   },
   "379810": {
    "currency": "KRW",
@@ -116,7 +116,7 @@
     }
    ],
    "src": "Yahoo Finance",
-   "updated": "2026-11-22"
+   "updated": "2026-11-23"
   },
   "458730": {
    "currency": "KRW",
@@ -215,7 +215,7 @@
     }
    ],
    "src": "Yahoo Finance",
-   "updated": "2026-11-22"
+   "updated": "2026-11-23"
   },
   "480040": {
    "currency": "KRW",
@@ -314,7 +314,7 @@
     }
    ],
    "src": "Yahoo Finance",
-   "updated": "2026-11-22"
+   "updated": "2026-11-23"
   },
   "GOOGL": {
    "currency": "USD",
@@ -353,7 +353,7 @@
     }
    ],
    "src": "Yahoo Finance",
-   "updated": "2026-11-22"
+   "updated": "2026-11-23"
   }
  },
  "monthEnd": {
